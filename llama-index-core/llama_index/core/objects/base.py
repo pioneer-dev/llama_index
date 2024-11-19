@@ -169,7 +169,7 @@ class ObjectIndex(Generic[OT]):
             )
 
         nodes = object_mapping.to_nodes(objects)
-        index = index_cls(nodes, **index_kwargs)
+        index = index_cls(nodes, use_async=True, **index_kwargs)
         return cls(index, object_mapping)
 
     @classmethod

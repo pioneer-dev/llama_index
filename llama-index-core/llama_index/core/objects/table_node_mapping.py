@@ -47,7 +47,7 @@ class SQLTableNodeMapping(BaseObjectNodeMapping[SQLTableSchema]):
         # taken from existing schema logic
         table_text = (
             f"Schema of table {obj.table_name}:\n"
-            f"{self._sql_database.get_single_table_info(obj.table_name)}\n"
+            f"{self._sql_database.get_schema_table_info(obj.table_name)}\n"
         )
 
         metadata = {"name": obj.table_name}
@@ -57,10 +57,7 @@ class SQLTableNodeMapping(BaseObjectNodeMapping[SQLTableSchema]):
             table_text += obj.context_str
             metadata["context"] = obj.context_str
 
-        table_identity = f"{obj.table_name}{obj.context_str}"
-
         return TextNode(
-            id_=str(hash(table_identity)),
             text=table_text,
             metadata=metadata,
             excluded_embed_metadata_keys=["name", "context"],
@@ -72,7 +69,8 @@ class SQLTableNodeMapping(BaseObjectNodeMapping[SQLTableSchema]):
         if node.metadata is None:
             raise ValueError("Metadata must be set")
         return SQLTableSchema(
-            table_name=node.metadata["name"], context_str=node.metadata.get("context")
+            table_name=node.metadata["name"], context_str=node.metadata.get(
+                "context")
         )
 
     @property

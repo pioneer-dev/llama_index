@@ -55,7 +55,8 @@ class SQLDatabase:
         self._engine = engine
         self._schema = schema
         if include_tables and ignore_tables:
-            raise ValueError("Cannot specify both include_tables and ignore_tables")
+            raise ValueError(
+                "Cannot specify both include_tables and ignore_tables")
 
         self._inspector = inspect(self._engine)
 
@@ -81,7 +82,8 @@ class SQLDatabase:
                     f"ignore_tables {missing_tables} not found in database"
                 )
         usable_tables = self.get_usable_table_names()
-        self._usable_tables = set(usable_tables) if usable_tables else self._all_tables
+        self._usable_tables = set(
+            usable_tables) if usable_tables else self._all_tables
 
         if not isinstance(sample_rows_in_table_info, int):
             raise TypeError("sample_rows_in_table_info must be an integer")
@@ -97,7 +99,8 @@ class SQLDatabase:
                     "desired table info as values"
                 )
             # only keep the tables that are also present in the database
-            intersection = set(self._custom_table_info).intersection(self._all_tables)
+            intersection = set(self._custom_table_info).intersection(
+                self._all_tables)
             self._custom_table_info = {
                 table: info
                 for table, info in self._custom_table_info.items()
@@ -150,47 +153,40 @@ class SQLDatabase:
 
     def get_single_table_info(self, table_name: str) -> str:
         """Get table info for a single table."""
-        # same logic as table_info, but with specific table names
-        template = "Table '{table_name}' has columns: {columns}, "
-        try:
-            # try to retrieve table comment
-            table_comment = self._inspector.get_table_comment(
-                table_name, schema=self._schema
-            )["text"]
-            if table_comment:
-                template += f"with comment: ({table_comment}) "
-        except NotImplementedError:
-            # get_table_comment raises NotImplementedError for a dialect that does not support comments.
-            pass
+        output = f"The table '{table_name}' has the following structure and includes sample rows (not all data is displayed):\n"
+        columns_with_comments = []
+        column_names = []
 
-        template += "{foreign_keys}."
-        columns = []
         for column in self._inspector.get_columns(table_name, schema=self._schema):
-            if column.get("comment"):
-                columns.append(
-                    f"{column['name']} ({column['type']!s}): "
-                    f"'{column.get('comment')}'"
-                )
-            else:
-                columns.append(f"{column['name']} ({column['type']!s})")
+            column_name = column['name']
+            comment = column.get("comment")
+            if comment:
+                columns_with_comments.append(f"[{column_name}] — '{comment}'")
+            column_names.append(column_name)
 
-        column_str = ", ".join(columns)
-        foreign_keys = []
-        for foreign_key in self._inspector.get_foreign_keys(
-            table_name, schema=self._schema
-        ):
-            foreign_keys.append(
-                f"{foreign_key['constrained_columns']} -> "
-                f"{foreign_key['referred_table']}.{foreign_key['referred_columns']}"
-            )
-        foreign_key_str = (
-            foreign_keys
-            and " and foreign keys: {}".format(", ".join(foreign_keys))
-            or ""
-        )
-        return template.format(
-            table_name=table_name, columns=column_str, foreign_keys=foreign_key_str
-        )
+        # Add columns with comments to output
+        if columns_with_comments:
+            output += "Column description:\n" + \
+                "\n".join(columns_with_comments) + "\n"
+        # Add the list of column names, separated by " | "
+        output += "| " + " | ".join(column_names) + " |\n"
+        # Add the Markdown separator line
+        output += "| " + " | ".join(["---"] * len(column_names)) + " |\n"
+
+        return output
+
+    def get_schema_table_info(self, table_name: str) -> str:
+        """Get table info for a single table."""
+        output = f"The table '{table_name}' has the following structure:\n"
+        column_names = []
+
+        for column in self._inspector.get_columns(table_name, schema=self._schema):
+            column_names.append(column['name'])
+
+        # Add the list of column names, separated by " | "
+        output += "| " + " | ".join(column_names) + " |\n"
+
+        return output
 
     def insert_into_table(self, table_name: str, data: dict) -> None:
         """Insert data into a table."""
@@ -224,10 +220,15 @@ class SQLDatabase:
                     command = command.replace("FROM ", f"FROM {self._schema}.")
                     command = command.replace("JOIN ", f"JOIN {self._schema}.")
                 cursor = connection.execute(text(command))
-            except (ProgrammingError, OperationalError) as exc:
-                raise NotImplementedError(
-                    f"Statement {command!r} is invalid SQL.\nError: {exc.orig}"
-                ) from exc
+            except (ProgrammingError, OperationalError) as exc:  # FIX
+                # raise NotImplementedError(
+                #    f"Statement {command!r} is invalid SQL."
+                # ) from exc
+                error_message = f"SQL Error: {str(exc)}"
+                return error_message, {
+                    "result": [],
+                    "col_keys": []
+                }
             if cursor.returns_rows:
                 result = cursor.fetchall()
                 # truncate the results to the max string length
@@ -236,7 +237,8 @@ class SQLDatabase:
                 for row in result:
                     # truncate each column, then convert the row to a tuple
                     truncated_row = tuple(
-                        self.truncate_word(column, length=self._max_string_length)
+                        self.truncate_word(
+                            column, length=self._max_string_length)
                         for column in row
                     )
                     truncated_results.append(truncated_row)

@@ -35,7 +35,7 @@ def asyncio_run(coro: Coroutine) -> Any:
     except RuntimeError as e:
         # If we can't get the event loop, we're likely in a different thread, or its already running
         try:
-            return asyncio.run(coro)
+            return asyncio.ensure_future(coro)
         except RuntimeError as e:
             raise RuntimeError(
                 "Detected nested async. Please use nest_asyncio.apply() to allow nested event loops."
