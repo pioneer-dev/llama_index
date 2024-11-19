@@ -58,9 +58,12 @@ llama-index-agent-openai = "^0.4.0"
 llama-index-readers-file = "^0.4.0"
 llama-index-readers-llama-parse = ">=0.4.0"
 llama-index-indices-managed-llama-cloud = ">=0.4.0"
-llama-index-core = {path = "./llama-index-core"}
 llama-index-multi-modal-llms-openai = "^0.3.0"
 llama-index-cli = "^0.4.0"
+llama-index-embeddings-huggingface = "^0.4.0"
+llama-index-vector-stores-qdrant = "^0.4.0"
+llama-index-llms-nvidia-triton = {path = "./llama-index-integrations/llms/llama-index-llms-nvidia-triton"}
+llama-index-core = {path = "./llama-index-core"}
 nltk = ">3.8.1"  # avoids a CVE, temp until next release, should be in llama-index-core
 
 [tool.poetry.group.dev.dependencies]
