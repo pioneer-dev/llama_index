@@ -153,7 +153,11 @@ class SQLDatabase:
 
     def get_single_table_info(self, table_name: str) -> str:
         """Get table info for a single table."""
-        output = f"The table '{table_name}' has the following structure and includes sample rows (not all data is displayed):\n"
+        from datetime import datetime as dt
+
+        def date_only():
+            return dt.now().strftime("%Y-%m-%d")
+        output = f"Current date: {date_only()}.\n The table '{table_name}' has the following structure and includes sample rows (not all data is displayed):\n"
         columns_with_comments = []
         column_names = []
 
