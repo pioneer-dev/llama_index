@@ -36,7 +36,8 @@ def get_data_model(
 
     class AbstractData(base):  # type: ignore
         __abstract__ = True  # this line is necessary
-        id = Column(Integer, primary_key=True, autoincrement=True)  # Add primary key
+        id = Column(Integer, primary_key=True,
+                    autoincrement=True)  # Add primary key
         key = Column(VARCHAR, nullable=False)
         value = Column(ARRAY(chat_dtype))
 
@@ -193,7 +194,7 @@ class PostgresChatStore(BaseChatStore):
 
             params = {
                 "key": key,
-                "value": [json.dumps(message.dict()) for message in messages],
+                "value": [json.dumps(message.dict(), ensure_ascii=False) for message in messages],
             }
 
             # Execute the bulk upsert
@@ -215,7 +216,7 @@ class PostgresChatStore(BaseChatStore):
 
             params = {
                 "key": key,
-                "value": [json.dumps(message.dict()) for message in messages],
+                "value": [json.dumps(message.dict(), ensure_ascii=False) for message in messages],
             }
 
             # Execute the bulk upsert
@@ -225,7 +226,8 @@ class PostgresChatStore(BaseChatStore):
     def get_messages(self, key: str) -> list[ChatMessage]:
         """Get messages for a key."""
         with self._session() as session:
-            result = session.execute(select(self._table_class).filter_by(key=key))
+            result = session.execute(
+                select(self._table_class).filter_by(key=key))
             result = result.scalars().first()
             if result:
                 return [
@@ -258,7 +260,8 @@ class PostgresChatStore(BaseChatStore):
                     value = array_cat({self._table_class.__tablename__}.value, :value);
                 """
             )
-            params = {"key": key, "value": [json.dumps(message.dict())]}
+            params = {"key": key, "value": [
+                json.dumps(message.dict(), ensure_ascii=False)]}
             session.execute(stmt, params)
             session.commit()
 
@@ -274,7 +277,8 @@ class PostgresChatStore(BaseChatStore):
                     value = array_cat({self._table_class.__tablename__}.value, :value);
                 """
             )
-            params = {"key": key, "value": [json.dumps(message.dict())]}
+            params = {"key": key, "value": [
+                json.dumps(message.dict(), ensure_ascii=False)]}
             await session.execute(stmt, params)
             await session.commit()
 
@@ -296,7 +300,8 @@ class PostgresChatStore(BaseChatStore):
         """Delete specific message for a key."""
         with self._session() as session:
             # First, retrieve the current list of messages
-            stmt = select(self._table_class.value).where(self._table_class.key == key)
+            stmt = select(self._table_class.value).where(
+                self._table_class.key == key)
             result = session.execute(stmt).scalar_one_or_none()
 
             if result is None or idx < 0 or idx >= len(result):
@@ -327,7 +332,8 @@ class PostgresChatStore(BaseChatStore):
         """Async version of Delete specific message for a key."""
         async with self._async_session() as session:
             # First, retrieve the current list of messages
-            stmt = select(self._table_class.value).where(self._table_class.key == key)
+            stmt = select(self._table_class.value).where(
+                self._table_class.key == key)
             result = (await session.execute(stmt)).scalar_one_or_none()
 
             if result is None or idx < 0 or idx >= len(result):
@@ -358,7 +364,8 @@ class PostgresChatStore(BaseChatStore):
         """Delete last message for a key."""
         with self._session() as session:
             # First, retrieve the current list of messages
-            stmt = select(self._table_class.value).where(self._table_class.key == key)
+            stmt = select(self._table_class.value).where(
+                self._table_class.key == key)
             result = session.execute(stmt).scalar_one_or_none()
 
             if result is None or len(result) == 0:
@@ -385,7 +392,8 @@ class PostgresChatStore(BaseChatStore):
         """Async version of Delete last message for a key."""
         async with self._async_session() as session:
             # First, retrieve the current list of messages
-            stmt = select(self._table_class.value).where(self._table_class.key == key)
+            stmt = select(self._table_class.value).where(
+                self._table_class.key == key)
             result = (await session.execute(stmt)).scalar_one_or_none()
 
             if result is None or len(result) == 0:
