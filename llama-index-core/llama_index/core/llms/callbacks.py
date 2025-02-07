@@ -32,6 +32,7 @@ from llama_index.core.instrumentation.events.llm import (
     LLMChatInProgressEvent,
     LLMCompletionInProgressEvent,
 )
+import inspect
 
 dispatcher = get_dispatcher(__name__)
 
@@ -72,7 +73,11 @@ def llm_chat_callback() -> Callable:
                     },
                 )
                 try:
-                    f_return_val = await f(_self, messages, **kwargs)
+                    if inspect.isasyncgenfunction(f):
+                        # Если функция возвращает асинхронный генератор, вызываем её без await
+                        f_return_val = f(_self, messages, **kwargs)
+                    else:
+                        f_return_val = await f(_self, messages, **kwargs)
                 except BaseException as e:
                     callback_manager.on_event_end(
                         CBEventType.LLM,
@@ -527,7 +532,7 @@ def llm_completion_callback() -> Callable:
                 setattr(dummy_wrapper, attr, v)
                 setattr(wrapped_llm_predict, attr, v)
 
-        if asyncio.iscoroutinefunction(f):
+        if asyncio.iscoroutinefunction(f) or inspect.isasyncgenfunction(f):
             if is_wrapped:
                 return async_dummy_wrapper
             else:

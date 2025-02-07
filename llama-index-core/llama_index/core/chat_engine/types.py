@@ -25,6 +25,8 @@ from llama_index.core.instrumentation.events.chat_engine import (
     StreamChatDeltaReceivedEvent,
 )
 import llama_index.core.instrumentation as instrument
+from opentelemetry import trace
+from opentelemetry.trace import NonRecordingSpan, set_span_in_context
 
 dispatcher = instrument.get_dispatcher(__name__)
 
@@ -61,7 +63,8 @@ class AgentChatResponse:
         if self.sources and not self.source_nodes:
             for tool_output in self.sources:
                 if isinstance(tool_output.raw_output, (Response, StreamingResponse)):
-                    self.source_nodes.extend(tool_output.raw_output.source_nodes)
+                    self.source_nodes.extend(
+                        tool_output.raw_output.source_nodes)
 
     def __post_init__(self) -> None:
         self.set_source_nodes()
@@ -127,7 +130,8 @@ class StreamingAgentChatResponse:
         if self.sources and not self.source_nodes:
             for tool_output in self.sources:
                 if isinstance(tool_output.raw_output, (Response, StreamingResponse)):
-                    self.source_nodes.extend(tool_output.raw_output.source_nodes)
+                    self.source_nodes.extend(
+                        tool_output.raw_output.source_nodes)
 
     def __post_init__(self) -> None:
         self.set_source_nodes()
@@ -208,10 +212,11 @@ class StreamingAgentChatResponse:
         if on_stream_end_fn is not None and not self.is_function:
             on_stream_end_fn()
 
-    @dispatcher.span
+    # @dispatcher.span
     async def awrite_response_to_history(
         self,
         memory: BaseMemory,
+        span_cotext=None,
         on_stream_end_fn: Optional[Callable] = None,
     ) -> None:
         self._ensure_async_setup()
@@ -226,46 +231,53 @@ class StreamingAgentChatResponse:
             )
 
         # try/except to prevent hanging on error
-        dispatcher.event(StreamChatStartEvent())
-        try:
-            final_text = ""
-            async for chat in self.achat_stream:
-                self.is_function = is_function(chat.message)
-                if chat.delta:
-                    dispatcher.event(
-                        StreamChatDeltaReceivedEvent(
-                            delta=chat.delta,
-                        )
-                    )
-                    self.aput_in_queue(chat.delta)
-                final_text += chat.delta or ""
+        # dispatcher.event(StreamChatStartEvent())
+        parent_span = NonRecordingSpan(span_cotext)
+        parent_context = set_span_in_context(parent_span)
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("StreamingAgentChatResponse.awrite_response_to_history", context=parent_context) as span:
+            try:
+                final_text = ""
+                chat_stream = self.achat_stream
+                if asyncio.iscoroutine(chat_stream):
+                    chat_stream = await chat_stream
+                async for chat in chat_stream:
+                    self.is_function = is_function(chat.message)
+                    if chat.delta:
+                        # dispatcher.event(
+                        #     StreamChatDeltaReceivedEvent(
+                        #         delta=chat.delta,
+                        #     )
+                        # )
+                        self.aput_in_queue(chat.delta)
+                    final_text += chat.delta or ""
+                    self.new_item_event.set()
+                    if self.is_function is False:
+                        self.is_function_false_event.set()
+                if self.is_function is not None:  # if loop has gone through iteration
+                    # NOTE: this is to handle the special case where we consume some of the
+                    # chat stream, but not all of it (e.g. in react agent)
+                    chat.message.content = final_text.strip()  # final message
+                    memory.put(chat.message)
+            except Exception as e:
+                # dispatcher.event(StreamChatErrorEvent(exception=e))
+                self.exception = e
+
+                # These act as is_done events for any consumers waiting
+                self.is_function_false_event.set()
                 self.new_item_event.set()
-                if self.is_function is False:
-                    self.is_function_false_event.set()
-            if self.is_function is not None:  # if loop has gone through iteration
-                # NOTE: this is to handle the special case where we consume some of the
-                # chat stream, but not all of it (e.g. in react agent)
-                chat.message.content = final_text.strip()  # final message
-                memory.put(chat.message)
-        except Exception as e:
-            dispatcher.event(StreamChatErrorEvent(exception=e))
-            self.exception = e
+
+                # force the queue reader to see the exception
+                self.aput_in_queue("")
+                raise
+            # dispatcher.event(StreamChatEndEvent())
+            self.is_done = True
 
             # These act as is_done events for any consumers waiting
             self.is_function_false_event.set()
             self.new_item_event.set()
-
-            # force the queue reader to see the exception
-            self.aput_in_queue("")
-            raise
-        dispatcher.event(StreamChatEndEvent())
-        self.is_done = True
-
-        # These act as is_done events for any consumers waiting
-        self.is_function_false_event.set()
-        self.new_item_event.set()
-        if on_stream_end_fn is not None and not self.is_function:
-            on_stream_end_fn()
+            if on_stream_end_fn is not None and not self.is_function:
+                on_stream_end_fn()
 
     @property
     def response_gen(self) -> Generator[str, None, None]:

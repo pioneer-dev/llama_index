@@ -12,6 +12,7 @@ from llama_index.core.llms.llm import LLM
 from llama_index.core.memory import BaseMemory, ChatMemoryBuffer
 from llama_index.core.settings import Settings
 from llama_index.core.types import Thread
+from openinference.instrumentation.llama_index import get_current_span
 
 
 class SimpleChatEngine(BaseChatEngine):
@@ -49,7 +50,8 @@ class SimpleChatEngine(BaseChatEngine):
         llm = llm or Settings.llm
 
         chat_history = chat_history or []
-        memory = memory or memory_cls.from_defaults(chat_history=chat_history, llm=llm)
+        memory = memory or memory_cls.from_defaults(
+            chat_history=chat_history, llm=llm)
 
         if system_prompt is not None:
             if prefix_messages is not None:
@@ -57,7 +59,8 @@ class SimpleChatEngine(BaseChatEngine):
                     "Cannot specify both system_prompt and prefix_messages"
                 )
             prefix_messages = [
-                ChatMessage(content=system_prompt, role=llm.metadata.system_role)
+                ChatMessage(content=system_prompt,
+                            role=llm.metadata.system_role)
             ]
 
         prefix_messages = prefix_messages or []
@@ -133,7 +136,8 @@ class SimpleChatEngine(BaseChatEngine):
             chat_stream=self._llm.stream_chat(all_messages)
         )
         thread = Thread(
-            target=chat_response.write_response_to_history, args=(self._memory,)
+            target=chat_response.write_response_to_history, args=(
+                self._memory,)
         )
         thread.start()
 
@@ -200,9 +204,10 @@ class SimpleChatEngine(BaseChatEngine):
         )
 
         chat_response = StreamingAgentChatResponse(
-            achat_stream=await self._llm.astream_chat(all_messages)
+            achat_stream=self._llm.astream_chat(all_messages)
         )
-        asyncio.create_task(chat_response.awrite_response_to_history(self._memory))
+        asyncio.create_task(chat_response.awrite_response_to_history(
+            self._memory, span_cotext=get_current_span().get_span_context()))
 
         return chat_response
 
