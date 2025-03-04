@@ -1,14 +1,6 @@
-import anthropic
 import json
-from anthropic.types import (
-    ContentBlockDeltaEvent,
-    TextBlock,
-    TextDelta,
-    ContentBlockStartEvent,
-    ContentBlockStopEvent,
-)
-from anthropic.types.tool_use_block import ToolUseBlock
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -17,9 +9,14 @@ from typing import (
     Sequence,
     Tuple,
     Union,
-    TYPE_CHECKING,
 )
 
+from llama_index.core.base.llms.generic_utils import (
+    achat_to_completion_decorator,
+    astream_chat_to_completion_decorator,
+    chat_to_completion_decorator,
+    stream_chat_to_completion_decorator,
+)
 from llama_index.core.base.llms.types import (
     ChatMessage,
     ChatResponse,
@@ -38,22 +35,26 @@ from llama_index.core.llms.callbacks import (
     llm_chat_callback,
     llm_completion_callback,
 )
-from llama_index.core.base.llms.generic_utils import (
-    achat_to_completion_decorator,
-    astream_chat_to_completion_decorator,
-    chat_to_completion_decorator,
-    stream_chat_to_completion_decorator,
-)
 from llama_index.core.llms.function_calling import FunctionCallingLLM, ToolSelection
+from llama_index.core.llms.utils import parse_partial_json
 from llama_index.core.types import BaseOutputParser, PydanticProgramMode
+from llama_index.core.utils import Tokenizer
 from llama_index.llms.anthropic.utils import (
     anthropic_modelname_to_contextsize,
     force_single_tool_call,
     is_function_calling_model,
     messages_to_anthropic_messages,
 )
-from llama_index.core.utils import Tokenizer
-from llama_index.core.llms.utils import parse_partial_json
+
+import anthropic
+from anthropic.types import (
+    ContentBlockDeltaEvent,
+    ContentBlockStartEvent,
+    ContentBlockStopEvent,
+    TextBlock,
+    TextDelta,
+)
+from anthropic.types.tool_use_block import ToolUseBlock
 
 if TYPE_CHECKING:
     from llama_index.core.tools.types import BaseTool
@@ -63,8 +64,22 @@ DEFAULT_ANTHROPIC_MODEL = "claude-2.1"
 DEFAULT_ANTHROPIC_MAX_TOKENS = 512
 
 
+class AnthropicTokenizer:
+    def __init__(self, client, model) -> None:
+        self._client = client
+        self.model = model
+
+    def encode(self, text: str, *args: Any, **kwargs: Any) -> List[int]:
+        count = self._client.beta.messages.count_tokens(
+            messages=[{"role": "user", "content": text}],
+            model=self.model,
+        ).input_tokens
+        return [1] * count
+
+
 class Anthropic(FunctionCallingLLM):
-    """Anthropic LLM.
+    """
+    Anthropic LLM.
 
     Examples:
         `pip install llama-index-llms-anthropic`
@@ -210,13 +225,7 @@ class Anthropic(FunctionCallingLLM):
 
     @property
     def tokenizer(self) -> Tokenizer:
-        def _count_tokens(text: str) -> int:
-            return self._client.beta.messages.count_tokens(
-                messages=[{"role": "user", "content": text}],
-                model=self.model,
-            ).input_tokens
-
-        return _count_tokens
+        return AnthropicTokenizer(self._client, self.model)
 
     @property
     def _model_kwargs(self) -> Dict[str, Any]:
@@ -466,7 +475,7 @@ class Anthropic(FunctionCallingLLM):
                     "input_schema": tool.metadata.get_parameters_dict(),
                 }
             )
-        return {"messages": chat_history, "tools": tool_dicts or None, **kwargs}
+        return {"messages": chat_history, "tools": tool_dicts, **kwargs}
 
     def _validate_chat_with_tools_response(
         self,

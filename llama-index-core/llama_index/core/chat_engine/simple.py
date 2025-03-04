@@ -206,8 +206,10 @@ class SimpleChatEngine(BaseChatEngine):
         chat_response = StreamingAgentChatResponse(
             achat_stream=self._llm.astream_chat(all_messages)
         )
-        asyncio.create_task(chat_response.awrite_response_to_history(
-            self._memory, span_cotext=get_current_span().get_span_context()))
+        chat_response.awrite_response_to_history_task = asyncio.create_task(
+            chat_response.awrite_response_to_history(
+                self._memory, span_cotext=get_current_span().get_span_context())
+        )
 
         return chat_response
 

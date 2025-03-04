@@ -2,11 +2,12 @@ import functools
 from typing import (
     TYPE_CHECKING,
     Any,
-    Generator,
     Awaitable,
     Callable,
     Dict,
+    Generator,
     List,
+    Literal,
     Optional,
     Protocol,
     Sequence,
@@ -18,6 +19,8 @@ from typing import (
 
 import httpx
 import tiktoken
+
+import llama_index.core.instrumentation as instrument
 from llama_index.core.base.llms.generic_utils import (
     achat_to_completion_decorator,
     acompletion_to_chat_decorator,
@@ -39,7 +42,11 @@ from llama_index.core.base.llms.types import (
     LLMMetadata,
     MessageRole,
 )
-from llama_index.core.bridge.pydantic import Field, PrivateAttr
+from llama_index.core.bridge.pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+)
 from llama_index.core.callbacks import CallbackManager
 from llama_index.core.constants import (
     DEFAULT_TEMPERATURE,
@@ -50,7 +57,8 @@ from llama_index.core.llms.callbacks import (
 )
 from llama_index.core.llms.function_calling import FunctionCallingLLM
 from llama_index.core.llms.llm import ToolSelection
-from llama_index.core.types import BaseOutputParser, PydanticProgramMode, Model
+from llama_index.core.llms.utils import parse_partial_json
+from llama_index.core.types import BaseOutputParser, Model, PydanticProgramMode
 from llama_index.llms.openai.utils import (
     O1_MODELS,
     OpenAIToolCall,
@@ -62,14 +70,10 @@ from llama_index.llms.openai.utils import (
     is_function_calling_model,
     openai_modelname_to_contextsize,
     resolve_openai_credentials,
-    to_openai_message_dicts,
     resolve_tool_choice,
+    to_openai_message_dicts,
     update_tool_calls,
 )
-from llama_index.core.bridge.pydantic import (
-    BaseModel,
-)
-
 from openai import AsyncOpenAI, AzureOpenAI
 from openai import OpenAI as SyncOpenAI
 from openai.types.chat.chat_completion_chunk import (
@@ -77,9 +81,6 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDelta,
     ChoiceDeltaToolCall,
 )
-from llama_index.core.llms.utils import parse_partial_json
-
-import llama_index.core.instrumentation as instrument
 
 dispatcher = instrument.get_dispatcher(__name__)
 
@@ -89,7 +90,7 @@ if TYPE_CHECKING:
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 
 
-def llm_retry_decorator(f: Callable[[Any], Any]) -> Callable[[Any], Any]:
+def llm_retry_decorator(f: Callable[..., Any]) -> Callable[..., Any]:
     @functools.wraps(f)
     def wrapper(self, *args: Any, **kwargs: Any) -> Any:
         max_retries = getattr(self, "max_retries", 0)
@@ -112,7 +113,7 @@ def llm_retry_decorator(f: Callable[[Any], Any]) -> Callable[[Any], Any]:
 class Tokenizer(Protocol):
     """Tokenizers support an encode function that returns a list of ints."""
 
-    def encode(self, text: str) -> List[int]:
+    def encode(self, text: str) -> List[int]:  # fmt: skip
         ...
 
 
@@ -170,7 +171,7 @@ class OpenAI(FunctionCallingLLM):
         default=DEFAULT_TEMPERATURE,
         description="The temperature to use during generation.",
         ge=0.0,
-        le=1.0,
+        le=2.0,
     )
     max_tokens: Optional[int] = Field(
         description="The maximum number of tokens to generate.",
@@ -217,6 +218,18 @@ class OpenAI(FunctionCallingLLM):
         default=False,
         description="Whether to use strict mode for invoking tools/using schemas.",
     )
+    reasoning_effort: Optional[Literal["low", "medium", "high"]] = Field(
+        default=None,
+        description="The effort to use for reasoning models.",
+    )
+    modalities: Optional[List[str]] = Field(
+        default=None,
+        description="The output modalities to use for the model.",
+    )
+    audio_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="The audio configuration to use for the model.",
+    )
 
     _client: Optional[SyncOpenAI] = PrivateAttr()
     _aclient: Optional[AsyncOpenAI] = PrivateAttr()
@@ -248,8 +261,16 @@ class OpenAI(FunctionCallingLLM):
         pydantic_program_mode: PydanticProgramMode = PydanticProgramMode.DEFAULT,
         output_parser: Optional[BaseOutputParser] = None,
         strict: bool = False,
+        reasoning_effort: Optional[Literal["low", "medium", "high"]] = None,
+        modalities: Optional[List[str]] = None,
+        audio_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
+        # TODO: Support deprecated max_new_tokens
+        if "max_new_tokens" in kwargs:
+            max_tokens = kwargs["max_new_tokens"]
+            del kwargs["max_new_tokens"]
+
         additional_kwargs = additional_kwargs or {}
 
         api_key, api_base, api_version = resolve_openai_credentials(
@@ -281,6 +302,9 @@ class OpenAI(FunctionCallingLLM):
             pydantic_program_mode=pydantic_program_mode,
             output_parser=output_parser,
             strict=strict,
+            reasoning_effort=reasoning_effort,
+            modalities=modalities,
+            audio_config=audio_config,
             **kwargs,
         )
 
@@ -368,6 +392,11 @@ class OpenAI(FunctionCallingLLM):
     def complete(
         self, prompt: str, formatted: bool = False, **kwargs: Any
     ) -> CompletionResponse:
+        if self.modalities and "audio" in self.modalities:
+            raise ValueError(
+                "Audio is not supported for completion. Use chat/achat instead."
+            )
+
         if self._use_chat_completions(kwargs):
             complete_fn = chat_to_completion_decorator(self._chat)
         else:
@@ -417,13 +446,30 @@ class OpenAI(FunctionCallingLLM):
         all_kwargs = {**base_kwargs, **self.additional_kwargs}
         if "stream" not in all_kwargs and "stream_options" in all_kwargs:
             del all_kwargs["stream_options"]
+        if self.model in O1_MODELS and base_kwargs.get("max_tokens") is not None:
+            # O1 models use max_completion_tokens instead of max_tokens
+            all_kwargs["max_completion_tokens"] = all_kwargs.get(
+                "max_completion_tokens", all_kwargs["max_tokens"]
+            )
+            all_kwargs.pop("max_tokens", None)
+        if self.model in O1_MODELS and self.reasoning_effort is not None:
+            # O1 models support reasoning_effort of low, medium, high
+            all_kwargs["reasoning_effort"] = self.reasoning_effort
+
+        if self.modalities is not None:
+            all_kwargs["modalities"] = self.modalities
+        if self.audio_config is not None:
+            all_kwargs["audio"] = self.audio_config
 
         return all_kwargs
 
     @llm_retry_decorator
     def _chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponse:
         client = self._get_client()
-        message_dicts = to_openai_message_dicts(messages, model=self.model)
+        message_dicts = to_openai_message_dicts(
+            messages,
+            model=self.model,
+        )
 
         if self.reuse_client:
             response = client.chat.completions.create(
@@ -440,7 +486,9 @@ class OpenAI(FunctionCallingLLM):
                 )
 
         openai_message = response.choices[0].message
-        message = from_openai_message(openai_message)
+        message = from_openai_message(
+            openai_message, modalities=self.modalities or ["text"]
+        )
         openai_token_logprobs = response.choices[0].logprobs
         logprobs = None
         if openai_token_logprobs and openai_token_logprobs.content:
@@ -457,8 +505,14 @@ class OpenAI(FunctionCallingLLM):
     def _stream_chat(
         self, messages: Sequence[ChatMessage], **kwargs: Any
     ) -> ChatResponseGen:
+        if self.modalities and "audio" in self.modalities:
+            raise ValueError("Audio is not supported for chat streaming")
+
         client = self._get_client()
-        message_dicts = to_openai_message_dicts(messages, model=self.model)
+        message_dicts = to_openai_message_dicts(
+            messages,
+            model=self.model,
+        )
 
         def gen() -> ChatResponseGen:
             content = ""
@@ -645,6 +699,11 @@ class OpenAI(FunctionCallingLLM):
     async def acomplete(
         self, prompt: str, formatted: bool = False, **kwargs: Any
     ) -> CompletionResponse:
+        if self.modalities and "audio" in self.modalities:
+            raise ValueError(
+                "Audio is not supported for completion. Use chat/achat instead."
+            )
+
         if self._use_chat_completions(kwargs):
             acomplete_fn = achat_to_completion_decorator(self._achat)
         else:
@@ -668,7 +727,10 @@ class OpenAI(FunctionCallingLLM):
         self, messages: Sequence[ChatMessage], **kwargs: Any
     ) -> ChatResponse:
         aclient = self._get_aclient()
-        message_dicts = to_openai_message_dicts(messages, model=self.model)
+        message_dicts = to_openai_message_dicts(
+            messages,
+            model=self.model,
+        )
 
         if self.reuse_client:
             response = await aclient.chat.completions.create(
@@ -683,7 +745,9 @@ class OpenAI(FunctionCallingLLM):
                 )
 
         openai_message = response.choices[0].message
-        message = from_openai_message(openai_message)
+        message = from_openai_message(
+            openai_message, modalities=self.modalities or ["text"]
+        )
         openai_token_logprobs = response.choices[0].logprobs
         logprobs = None
         if openai_token_logprobs and openai_token_logprobs.content:
@@ -700,8 +764,14 @@ class OpenAI(FunctionCallingLLM):
     async def _astream_chat(
         self, messages: Sequence[ChatMessage], **kwargs: Any
     ) -> ChatResponseAsyncGen:
+        if self.modalities and "audio" in self.modalities:
+            raise ValueError("Audio is not supported for chat streaming")
+
         aclient = self._get_aclient()
-        message_dicts = to_openai_message_dicts(messages, model=self.model)
+        message_dicts = to_openai_message_dicts(
+            messages,
+            model=self.model,
+        )
 
         async def gen() -> ChatResponseAsyncGen:
             content = ""
@@ -828,7 +898,7 @@ class OpenAI(FunctionCallingLLM):
 
     def _prepare_chat_with_tools(
         self,
-        tools: List["BaseTool"],
+        tools: Sequence["BaseTool"],
         user_msg: Optional[Union[str, ChatMessage]] = None,
         chat_history: Optional[List[ChatMessage]] = None,
         verbose: bool = False,
@@ -850,9 +920,8 @@ class OpenAI(FunctionCallingLLM):
             for tool_spec in tool_specs:
                 if tool_spec["type"] == "function":
                     tool_spec["function"]["strict"] = strict
-                    tool_spec["function"]["parameters"][
-                        "additionalProperties"
-                    ] = False  # in current openai 1.40.0 it is always false.
+                    # in current openai 1.40.0 it is always false.
+                    tool_spec["function"]["parameters"]["additionalProperties"] = False
 
         if isinstance(user_msg, str):
             user_msg = ChatMessage(role=MessageRole.USER, content=user_msg)
@@ -871,7 +940,7 @@ class OpenAI(FunctionCallingLLM):
     def _validate_chat_with_tools_response(
         self,
         response: ChatResponse,
-        tools: List["BaseTool"],
+        tools: Sequence["BaseTool"],
         allow_parallel_tool_calls: bool = False,
         **kwargs: Any,
     ) -> ChatResponse:
@@ -926,8 +995,10 @@ class OpenAI(FunctionCallingLLM):
     ) -> BaseModel:
         """Structured predict."""
         llm_kwargs = llm_kwargs or {}
+        all_kwargs = {**llm_kwargs, **kwargs}
+
         llm_kwargs["tool_choice"] = (
-            "required" if "tool_choice" not in llm_kwargs else llm_kwargs["tool_choice"]
+            "required" if "tool_choice" not in all_kwargs else all_kwargs["tool_choice"]
         )
         # by default structured prediction uses function calling to extract structured outputs
         # here we force tool_choice to be required
@@ -939,8 +1010,10 @@ class OpenAI(FunctionCallingLLM):
     ) -> BaseModel:
         """Structured predict."""
         llm_kwargs = llm_kwargs or {}
+        all_kwargs = {**llm_kwargs, **kwargs}
+
         llm_kwargs["tool_choice"] = (
-            "required" if "tool_choice" not in llm_kwargs else llm_kwargs["tool_choice"]
+            "required" if "tool_choice" not in all_kwargs else all_kwargs["tool_choice"]
         )
         # by default structured prediction uses function calling to extract structured outputs
         # here we force tool_choice to be required
@@ -952,22 +1025,28 @@ class OpenAI(FunctionCallingLLM):
     ) -> Generator[Union[Model, List[Model]], None, None]:
         """Stream structured predict."""
         llm_kwargs = llm_kwargs or {}
+        all_kwargs = {**llm_kwargs, **kwargs}
+
         llm_kwargs["tool_choice"] = (
-            "required" if "tool_choice" not in llm_kwargs else llm_kwargs["tool_choice"]
+            "required" if "tool_choice" not in all_kwargs else all_kwargs["tool_choice"]
         )
         # by default structured prediction uses function calling to extract structured outputs
         # here we force tool_choice to be required
         return super().stream_structured_predict(*args, llm_kwargs=llm_kwargs, **kwargs)
 
     @dispatcher.span
-    def stream_structured_predict(
+    async def astream_structured_predict(
         self, *args: Any, llm_kwargs: Optional[Dict[str, Any]] = None, **kwargs: Any
     ) -> Generator[Union[Model, List[Model]], None, None]:
         """Stream structured predict."""
         llm_kwargs = llm_kwargs or {}
+        all_kwargs = {**llm_kwargs, **kwargs}
+
         llm_kwargs["tool_choice"] = (
-            "required" if "tool_choice" not in llm_kwargs else llm_kwargs["tool_choice"]
+            "required" if "tool_choice" not in all_kwargs else all_kwargs["tool_choice"]
         )
         # by default structured prediction uses function calling to extract structured outputs
         # here we force tool_choice to be required
-        return super().stream_structured_predict(*args, llm_kwargs=llm_kwargs, **kwargs)
+        return await super().astream_structured_predict(
+            *args, llm_kwargs=llm_kwargs, **kwargs
+        )
