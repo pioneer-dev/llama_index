@@ -274,7 +274,7 @@ def llm_chat_callback() -> Callable:
                 setattr(dummy_wrapper, attr, v)
                 setattr(wrapped_llm_chat, attr, v)
 
-        if asyncio.iscoroutinefunction(f):
+        if asyncio.iscoroutinefunction(f) or inspect.isasyncgenfunction(f):
             if is_wrapped:
                 return async_dummy_wrapper
             else:
@@ -532,7 +532,7 @@ def llm_completion_callback() -> Callable:
                 setattr(dummy_wrapper, attr, v)
                 setattr(wrapped_llm_predict, attr, v)
 
-        if asyncio.iscoroutinefunction(f) or inspect.isasyncgenfunction(f):
+        if asyncio.iscoroutinefunction(f):
             if is_wrapped:
                 return async_dummy_wrapper
             else:
