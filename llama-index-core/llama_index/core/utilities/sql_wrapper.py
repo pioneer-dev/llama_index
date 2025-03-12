@@ -175,11 +175,16 @@ class SQLDatabase:
 
         return output
 
-    def get_schema_table_info(self, table_name: str) -> str:
+    def get_schema_table_info(self, table_name: str) -> str:  # FIX All
         """Get table info for a single table."""
         output = f"The table '{table_name}' has the following structure:\n"
+        
+        # Получаем комментарий таблицы
+        table_comment = self._inspector.get_table_comment(table_name, schema=self._schema).get("text")
+        if table_comment:
+            output += f"Table comment: '{table_comment}'\n"
+        
         column_names = []
-
         for column in self._inspector.get_columns(table_name, schema=self._schema):
             column_names.append(column['name'])
 
