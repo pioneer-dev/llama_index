@@ -63,6 +63,7 @@ llama-index-embeddings-huggingface = "^0.5.2"
 llama-index-vector-stores-qdrant = "^0.4.3"
 llama-index-llms-nvidia-triton = {path = "./llama-index-integrations/llms/llama-index-llms-nvidia-triton"}
 llama-index-storage-chat-store-postgres = {path = "./llama-index-integrations/storage/chat_store/llama-index-storage-chat-store-postgres"}
+llama-index-program-guidance = {path = "./llama-index-integrations/program/llama-index-program-guidance"}
 llama-index-core = {path = "./llama-index-core"}
 nltk = ">3.8.1"  # avoids a CVE, temp until next release, should be in llama-index-core
 
