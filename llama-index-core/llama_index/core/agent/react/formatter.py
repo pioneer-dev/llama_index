@@ -98,7 +98,7 @@ class ReActChatFormatter(BaseAgentChatFormatter):
             reasoning_history.append(message)
 
         return [
-            ChatMessage(role=MessageRole.SYSTEM, content=fmt_sys_header),
+            ChatMessage(role=MessageRole.CUSTOM, content=fmt_sys_header),
             *chat_history,
             *reasoning_history,
         ]

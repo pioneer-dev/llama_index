@@ -47,7 +47,7 @@ def messages_to_prompt(messages: Sequence[ChatMessage]) -> str:
 
 def prompt_to_messages(prompt: str) -> List[ChatMessage]:
     """Convert a string prompt to a sequence of messages."""
-    return [ChatMessage(role=MessageRole.USER, content=prompt)]
+    return [ChatMessage(role=MessageRole.CUSTOM, content=prompt)]
 
 
 def completion_response_to_chat_response(

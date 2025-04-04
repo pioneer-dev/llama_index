@@ -46,6 +46,7 @@ class MessageRole(str, Enum):
     TOOL = "tool"
     CHATBOT = "chatbot"
     MODEL = "model"
+    CUSTOM = ""
 
 
 class TextBlock(BaseModel):
@@ -358,7 +359,7 @@ class LLMMetadata(BaseModel):
         ),
     )
     is_function_calling_model: bool = Field(
-        default=False,
+        default=True,
         # SEE: https://openai.com/blog/function-calling-and-other-api-updates
         description=(
             "Set True if the model supports function calling messages, similar to"
