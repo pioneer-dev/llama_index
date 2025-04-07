@@ -97,9 +97,11 @@ class FunctionCallingProgram(BasePydanticProgram[Model]):
             )
 
         if prompt is None and prompt_template_str is None:
-            raise ValueError("Must provide either prompt or prompt_template_str.")
+            raise ValueError(
+                "Must provide either prompt or prompt_template_str.")
         if prompt is not None and prompt_template_str is not None:
-            raise ValueError("Must provide either prompt or prompt_template_str.")
+            raise ValueError(
+                "Must provide either prompt or prompt_template_str.")
         if prompt_template_str is not None:
             prompt = PromptTemplate(prompt_template_str)
 
@@ -159,7 +161,8 @@ class FunctionCallingProgram(BasePydanticProgram[Model]):
 
         agent_response = await self._llm.apredict_and_call(
             [tool],
-            chat_history=self._prompt.format_messages(llm=self._llm, **kwargs),
+            user_msg=self._prompt.format_messages(
+                llm=self._llm, **kwargs),  # fix
             verbose=self._verbose,
             allow_parallel_tool_calls=self._allow_parallel_tool_calls,
             **llm_kwargs,
@@ -238,7 +241,8 @@ class FunctionCallingProgram(BasePydanticProgram[Model]):
     def stream_call(
         self, *args: Any, llm_kwargs: Optional[Dict[str, Any]] = None, **kwargs: Any
     ) -> Generator[
-        Union[Model, List[Model], FlexibleModel, List[FlexibleModel]], None, None
+        Union[Model, List[Model], FlexibleModel,
+              List[FlexibleModel]], None, None
     ]:
         """Stream object.
 
@@ -274,7 +278,8 @@ class FunctionCallingProgram(BasePydanticProgram[Model]):
                     flexible_mode=True,
                     llm=self._llm,
                 )
-                cur_objects = objects if isinstance(objects, list) else [objects]
+                cur_objects = objects if isinstance(
+                    objects, list) else [objects]
                 yield objects
             except Exception as e:
                 _logger.warning(f"Failed to parse streaming response: {e}")
@@ -320,7 +325,8 @@ class FunctionCallingProgram(BasePydanticProgram[Model]):
                         flexible_mode=True,
                         llm=self._llm,
                     )
-                    cur_objects = objects if isinstance(objects, list) else [objects]
+                    cur_objects = objects if isinstance(
+                        objects, list) else [objects]
                     yield objects
                 except Exception as e:
                     _logger.warning(f"Failed to parse streaming response: {e}")

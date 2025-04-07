@@ -83,7 +83,8 @@ class ToolSelection(BaseModel):
 
     tool_id: str = Field(description="Tool ID to select.")
     tool_name: str = Field(description="Tool name to select.")
-    tool_kwargs: Dict[str, Any] = Field(description="Keyword arguments for the tool.")
+    tool_kwargs: Dict[str, Any] = Field(
+        description="Keyword arguments for the tool.")
 
     @field_validator("tool_kwargs", mode="wrap")
     @classmethod
@@ -306,7 +307,8 @@ class LLM(BaseLLM):
         """Add system prompt to chat message list."""
         if self.system_prompt:
             messages = [
-                ChatMessage(role=MessageRole.SYSTEM, content=self.system_prompt),
+                ChatMessage(role=MessageRole.SYSTEM,
+                            content=self.system_prompt),
                 *messages,
             ]
         return messages
@@ -650,11 +652,14 @@ class LLM(BaseLLM):
             stream_tokens = stream_chat_response_to_tokens(chat_response)
         else:
             formatted_prompt = self._get_prompt(prompt, **prompt_args)
-            stream_response = self.stream_complete(formatted_prompt, formatted=True)
-            stream_tokens = stream_completion_response_to_tokens(stream_response)
+            stream_response = self.stream_complete(
+                formatted_prompt, formatted=True)
+            stream_tokens = stream_completion_response_to_tokens(
+                stream_response)
 
         if prompt.output_parser is not None or self.output_parser is not None:
-            raise NotImplementedError("Output parser is not supported for streaming.")
+            raise NotImplementedError(
+                "Output parser is not supported for streaming.")
 
         return stream_tokens
 
@@ -746,7 +751,8 @@ class LLM(BaseLLM):
             stream_tokens = await astream_completion_response_to_tokens(stream_response)
 
         if prompt.output_parser is not None or self.output_parser is not None:
-            raise NotImplementedError("Output parser is not supported for streaming.")
+            raise NotImplementedError(
+                "Output parser is not supported for streaming.")
 
         return stream_tokens
 
@@ -779,10 +785,15 @@ class LLM(BaseLLM):
             react_chat_formatter=kwargs.get("react_chat_formatter", None),
             output_parser=kwargs.get("output_parser", None),
             tool_retriever=kwargs.get("tool_retriever", None),
-            handle_reasoning_failure_fn=kwargs.get("handle_reasoning_failure_fn", None),
+            handle_reasoning_failure_fn=kwargs.get(
+                "handle_reasoning_failure_fn", None),
         )
 
-        if isinstance(user_msg, ChatMessage) and isinstance(user_msg.content, str):
+        # fix
+        if isinstance(user_msg, list) and user_msg and isinstance(user_msg[0], ChatMessage):
+            user_msg = user_msg[0].content if isinstance(
+                user_msg[0].content, str) else None
+        elif isinstance(user_msg, ChatMessage) and isinstance(user_msg.content, str):
             user_msg = user_msg.content
         elif isinstance(user_msg, str):
             pass
@@ -794,7 +805,8 @@ class LLM(BaseLLM):
         ):
             user_msg = chat_history[-1].content
         else:
-            raise ValueError("No user message provided or found in chat history.")
+            raise ValueError(
+                "No user message provided or found in chat history.")
 
         task = Task(
             input=user_msg,
@@ -842,7 +854,8 @@ class LLM(BaseLLM):
             react_chat_formatter=kwargs.get("react_chat_formatter", None),
             output_parser=kwargs.get("output_parser", None),
             tool_retriever=kwargs.get("tool_retriever", None),
-            handle_reasoning_failure_fn=kwargs.get("handle_reasoning_failure_fn", None),
+            handle_reasoning_failure_fn=kwargs.get(
+                "handle_reasoning_failure_fn", None),
         )
 
         if isinstance(user_msg, ChatMessage) and isinstance(user_msg.content, str):
@@ -857,7 +870,8 @@ class LLM(BaseLLM):
         ):
             user_msg = chat_history[-1].content
         else:
-            raise ValueError("No user message provided or found in chat history.")
+            raise ValueError(
+                "No user message provided or found in chat history.")
 
         task = Task(
             input=user_msg,
@@ -920,7 +934,8 @@ class LLMCompleteComponent(BaseLLMComponent):
         else:
             input["prompt"] = validate_and_convert_stringable(input["prompt"])
             if self.llm.completion_to_prompt:
-                input["prompt"] = self.llm.completion_to_prompt(input["prompt"])
+                input["prompt"] = self.llm.completion_to_prompt(
+                    input["prompt"])
 
         return input
 
@@ -969,7 +984,8 @@ class LLMChatComponent(BaseLLMComponent):
 
         # if `messages` is a string, convert to a list of chat message
         if isinstance(input["messages"], get_args(StringableInput)):
-            input["messages"] = validate_and_convert_stringable(input["messages"])
+            input["messages"] = validate_and_convert_stringable(
+                input["messages"])
             input["messages"] = prompt_to_messages(str(input["messages"]))
 
         for message in input["messages"]:
