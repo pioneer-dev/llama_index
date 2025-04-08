@@ -858,7 +858,11 @@ class LLM(BaseLLM):
                 "handle_reasoning_failure_fn", None),
         )
 
-        if isinstance(user_msg, ChatMessage) and isinstance(user_msg.content, str):
+        # fix
+        if isinstance(user_msg, list) and user_msg and isinstance(user_msg[0], ChatMessage):
+            user_msg = user_msg[0].content if isinstance(
+                user_msg[0].content, str) else None
+        elif isinstance(user_msg, ChatMessage) and isinstance(user_msg.content, str):
             user_msg = user_msg.content
         elif isinstance(user_msg, str):
             pass
