@@ -41,7 +41,7 @@ def messages_to_prompt(messages: Sequence[ChatMessage]) -> str:
             string_message += f"\n{additional_kwargs}"
         string_messages.append(string_message)
 
-    string_messages.append(f"{MessageRole.ASSISTANT.value}: ")
+    string_messages.append(f"{MessageRole.CUSTOM.value}: ")  # fix
     return "\n".join(string_messages)
 
 
