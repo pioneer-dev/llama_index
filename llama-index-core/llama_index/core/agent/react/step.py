@@ -70,7 +70,7 @@ def add_user_step_to_reasoning(
     """Add user step to memory."""
     if "is_first" in step.step_state and step.step_state["is_first"]:
         # add to new memory
-        memory.put(ChatMessage(content=step.input, role=MessageRole.USER))
+        memory.put(ChatMessage(content=step.input, role=MessageRole.CUSTOM))
         step.step_state["is_first"] = False
     else:
         reasoning_step = ObservationReasoningStep(observation=step.input)

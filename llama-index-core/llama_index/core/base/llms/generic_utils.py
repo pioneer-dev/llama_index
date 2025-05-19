@@ -34,7 +34,7 @@ def messages_to_prompt(messages: Sequence[ChatMessage]) -> str:
     for message in messages:
         role = message.role
         content = message.content
-        string_message = f"{role.value}: {content}"
+        string_message = f"{role.value} {content}"
 
         additional_kwargs = message.additional_kwargs
         if additional_kwargs:
