@@ -153,7 +153,7 @@ class SQLDatabase:
 
     def get_single_table_info(self, table_name: str) -> str:
         """Get table info for a single table."""
-        output = f"The table '{table_name}' has the following structure and includes sample rows (not all data is displayed):\n"
+        output = f"Структура таблицы '{table_name}' и примеры её содержимого (показаны не все строки):\n"
         columns_with_comments = []
         column_names = []
 
@@ -166,7 +166,7 @@ class SQLDatabase:
 
         # Add columns with comments to output
         if columns_with_comments:
-            output += "Column description:\n" + \
+            output += "Описание столбцов таблицы:\n" + \
                 "\n".join(columns_with_comments) + "\n"
         # Add the list of column names, separated by " | "
         output += "| " + " | ".join(column_names) + " |\n"
@@ -177,12 +177,12 @@ class SQLDatabase:
 
     def get_schema_table_info(self, table_name: str) -> str:  # FIX All
         """Get table info for a single table."""
-        output = f"The table '{table_name}' has the following structure:\n"
+        output = f"Таблица '{table_name}' имеет следующую структуру\n"
         
         # Получаем комментарий таблицы
         table_comment = self._inspector.get_table_comment(table_name, schema=self._schema).get("text")
         if table_comment:
-            output += f"Table comment: '{table_comment}'\n"
+            output += f"Комментарий к таблице: '{table_comment}'\n"
         
         column_names = []
         for column in self._inspector.get_columns(table_name, schema=self._schema):
