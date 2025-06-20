@@ -81,6 +81,7 @@ class AzureOpenAI(OpenAI):
             api_version=aoai_api_version,
         )
         ```
+
     """
 
     engine: str = Field(description="The name of the deployed azure engine.")
@@ -146,9 +147,10 @@ class AzureOpenAI(OpenAI):
         if engine is None:
             raise ValueError("You must specify an `engine` parameter.")
 
-        azure_endpoint = get_from_param_or_env(
-            "azure_endpoint", azure_endpoint, "AZURE_OPENAI_ENDPOINT", ""
-        )
+        if api_base is None:
+            azure_endpoint = get_from_param_or_env(
+                "azure_endpoint", azure_endpoint, "AZURE_OPENAI_ENDPOINT", ""
+            )
 
         super().__init__(
             engine=engine,
@@ -178,7 +180,7 @@ class AzureOpenAI(OpenAI):
         )
 
         # reset api_base to None if it is the default
-        if self.api_base == DEFAULT_OPENAI_API_BASE:
+        if self.api_base == DEFAULT_OPENAI_API_BASE or self.azure_endpoint:
             self.api_base = None
 
     @model_validator(mode="before")

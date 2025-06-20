@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Sequence, cast
+from typing import List, Sequence, Optional, cast
 
 from llama_index.core.agent.react.formatter import ReActChatFormatter
 from llama_index.core.agent.react.output_parser import ReActOutputParser
@@ -27,9 +27,10 @@ from llama_index.core.tools import AsyncBaseTool
 from llama_index.core.workflow import Context
 
 
-def default_formatter() -> ReActChatFormatter:
+def default_formatter(fields: Optional[dict] = None) -> ReActChatFormatter:
     """Sets up a default formatter so that the proper react header is set."""
-    return ReActChatFormatter.from_defaults(context="some context")
+    fields = fields or {}
+    return ReActChatFormatter.from_defaults(context=fields.get("system_prompt", None))
 
 
 class ReActAgent(BaseWorkflowAgent):
@@ -53,9 +54,11 @@ class ReActAgent(BaseWorkflowAgent):
 
     def _update_prompts(self, prompts: PromptDictType) -> None:
         """Update prompts."""
-        if "system_prompt" in prompts:
-            react_header = cast(PromptTemplate, prompts["react_header"])
-            self.formatter.system_header = react_header.template
+        if "react_header" in prompts:
+            react_header = prompts["react_header"]
+            if isinstance(react_header, str):
+                react_header = PromptTemplate(react_header)
+            self.formatter.system_header = react_header.get_template()
 
     async def take_step(
         self,
