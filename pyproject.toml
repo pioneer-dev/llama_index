@@ -64,6 +64,9 @@ llama-index-vector-stores-qdrant = "^0.4.3"
 llama-index-llms-nvidia-triton = {path = "./llama-index-integrations/llms/llama-index-llms-nvidia-triton"}
 llama-index-storage-chat-store-postgres = {path = "./llama-index-integrations/storage/chat_store/llama-index-storage-chat-store-postgres"}
 llama-index-vector-stores-postgres = {path = "./llama-index-integrations/vector_stores/llama-index-vector-stores-postgres"}
+llama-index-llms-azure-openai = {path = "./llama-index-integrations/llms/llama-index-llms-azure-openai"}
+llama-index-llms-openai = {path = "./llama-index-integrations/llms/llama-index-llms-openai"}
+llama-index-llms-openai-like = {path = "./llama-index-integrations/llms/llama-index-llms-openai-like"}
 llama-index-core = {path = "./llama-index-core"}
 nltk = ">3.8.1"  # avoids a CVE, temp until next release, should be in llama-index-core
 
