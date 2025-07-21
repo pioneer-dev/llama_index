@@ -49,7 +49,7 @@ version = "0.12.22"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-llama-index-llms-openai = "^0.3.0"
+llama-index-llms-openai = ">=0.3.38"
 llama-index-embeddings-openai = "^0.3.0"
 llama-index-program-openai = "^0.3.0"
 llama-index-question-gen-openai = "^0.3.0"
